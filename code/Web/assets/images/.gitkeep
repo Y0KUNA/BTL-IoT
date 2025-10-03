@@ -1,0 +1,34 @@
+# Assets Directory
+
+This directory contains static assets for the IoT Dashboard application.
+
+## Images Directory
+
+Place any image assets here such as:
+- Profile pictures
+- Icons
+- Logos
+- Background images
+
+## Usage
+
+Images can be referenced in the application using relative paths:
+
+// Example usage in components
+const imagePath = 'assets/images/profile-default.jpg';
+```
+
+## Supported Formats
+
+- PNG
+- JPG/JPEG
+- SVG
+- WebP
+- GIF
+
+## Optimization
+
+For best performance:
+- Compress images before adding
+- Use appropriate formats (SVG for icons, JPG for photos)
+- Consider responsive image sizes for mobile devices

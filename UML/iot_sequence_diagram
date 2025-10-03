@@ -1,0 +1,20 @@
+digraph IoT_Activity {
+	rankdir=TB size=8
+	start [label=Start shape=circle]
+	read [label="ESP8266 đọc dữ liệu cảm biến" shape=box]
+	send [label="Gửi dữ liệu qua WiFi" shape=box]
+	store [label="Lưu dữ liệu vào Database" shape=box]
+	display [label="Web Server hiển thị dữ liệu" shape=box]
+	control [label="Người dùng gửi lệnh điều khiển LED" shape=box]
+	send_cmd [label="Web Server gửi lệnh cho ESP8266" shape=box]
+	act [label="ESP8266 bật/tắt LED" shape=box]
+	end [label=End shape=doublecircle]
+	start -> read
+	read -> send
+	send -> store
+	store -> display
+	display -> control
+	control -> send_cmd
+	send_cmd -> act
+	act -> end
+}
