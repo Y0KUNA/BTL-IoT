@@ -22,5 +22,6 @@ CREATE TABLE device_log (
     source VARCHAR(50) DEFAULT 'ESP',
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+DELETE FROM device_log;
 SELECT * FROM device_log;
 SELECT TOP 100 * FROM device_log ORDER BY id DESC

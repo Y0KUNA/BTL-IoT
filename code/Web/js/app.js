@@ -28,13 +28,9 @@ class IoTDashboard {
         navItems.forEach(item => {
             item.addEventListener('click', (e) => {
                 const tabName = e.currentTarget.getAttribute('data-tab');
-
+                console.log(`Navigating to tab: ${tabName}`);
                 // Nếu chưa login mà click tab khác login => chặn
-                if (!localStorage.getItem('token') && tabName !== 'login') {
-                    alert('Vui lòng đăng nhập trước');
-                    this.switchTab('login');
-                    return;
-                }
+                
 
                 this.switchTab(tabName);
             });
@@ -61,6 +57,7 @@ class IoTDashboard {
         // Load component content
         this.currentTab = tabName;
         this.loadComponent(tabName);
+        console.log(`Switched to tab: ${tabName}`);
     }
 
     loadComponent(tabName) {

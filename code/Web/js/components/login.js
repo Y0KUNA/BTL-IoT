@@ -9,6 +9,7 @@ class LoginComponent {
 
     render() {
         if (!this.container) return;
+        console.log('Rendering LoginComponent');
         this.container.innerHTML = `
             <div class="card" style="max-width:400px; margin:0 auto;">
                 <h2 class="card-title text-center">Đăng nhập</h2>
