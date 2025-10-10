@@ -6,7 +6,7 @@
 // ====== WiFi & MQTT ======
 const char* ssid = "realme Q3s";
 const char* password = "10580103";
-const char* mqtt_server = "192.168.99.161";
+const char* mqtt_server = "192.168.108.201";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -24,6 +24,11 @@ DHT dht(DHTPIN, DHTTYPE);
 #define LED2 D6
 #define LED3 D7
 
+// Lưu trạng thái LED lần trước để kiểm tra thay đổi
+int lastLed1State = LOW;
+int lastLed2State = LOW;
+int lastLed3State = LOW;
+
 // ====== WiFi ======
 void setup_wifi() {
   delay(10);
@@ -40,7 +45,7 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
-// ====== Gửi trạng thái LED hiện tại ======
+// ====== Publish LED state ======
 void publishLedState() {
   StaticJsonDocument<128> doc;
   doc["led1"] = digitalRead(LED1) == HIGH ? "ON" : "OFF";
@@ -50,8 +55,7 @@ void publishLedState() {
   char buffer[128];
   serializeJson(doc, buffer);
 
-  // Gửi trạng thái thực tế lên topic iot/led/state
-  client.publish("iot/led/state", buffer);
+  client.publish("iot/led/state", buffer, true);
   Serial.print("📤 LED state sent: ");
   Serial.println(buffer);
 }
@@ -63,12 +67,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
 
   String message;
-  for (int i = 0; i < length; i++) {
+  for (unsigned int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
   Serial.println(message);
 
-  // Parse JSON
   StaticJsonDocument<128> doc;
   DeserializationError error = deserializeJson(doc, message);
   if (error) {
@@ -77,7 +80,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  // Đọc giá trị và điều khiển LED
+  // Điều khiển LED theo nội dung nhận được
   if (doc.containsKey("led1")) {
     String v = doc["led1"].as<String>();
     digitalWrite(LED1, (v == "ON" || v == "1") ? HIGH : LOW);
@@ -90,12 +93,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
     String v = doc["led3"].as<String>();
     digitalWrite(LED3, (v == "ON" || v == "1") ? HIGH : LOW);
   }
-
-  Serial.printf("💡 LED => L1:%d L2:%d L3:%d\n",
-                digitalRead(LED1), digitalRead(LED2), digitalRead(LED3));
-
-  // ➡️ Sau khi điều khiển xong, publish trạng thái LED thực tế
-  publishLedState();
 }
 
 // ====== MQTT Reconnect ======
@@ -105,6 +102,7 @@ void reconnect() {
     if (client.connect("ESP8266Client", "huy", "123")) {
       Serial.println("✅ OK");
       client.subscribe("iot/led/control");
+      publishLedState(); // gửi trạng thái đèn sau khi kết nối lại
     } else {
       Serial.print("❌ Thất bại, rc=");
       Serial.println(client.state());
@@ -124,6 +122,18 @@ void setup() {
   pinMode(LED1, OUTPUT);
   pinMode(LED2, OUTPUT);
   pinMode(LED3, OUTPUT);
+
+  // Khởi tạo LED tắt
+  digitalWrite(LED1, LOW);
+  digitalWrite(LED2, LOW);
+  digitalWrite(LED3, LOW);
+
+  // Lưu trạng thái ban đầu
+  lastLed1State = digitalRead(LED1);
+  lastLed2State = digitalRead(LED2);
+  lastLed3State = digitalRead(LED3);
+
+  publishLedState();
 }
 
 // ====== Loop ======
@@ -131,21 +141,23 @@ void loop() {
   if (!client.connected()) reconnect();
   client.loop();
 
-  // Đọc cảm biến & gửi JSON
+  // --- Gửi dữ liệu cảm biến ---
   float h = dht.readHumidity();
   float t = dht.readTemperature();
   int ldr = analogRead(LDR_PIN);
 
-  StaticJsonDocument<128> doc;
-  doc["temperature"] = isnan(t) ? 0 : t;
-  doc["humidity"] = isnan(h) ? 0 : h;
-  doc["light"] = ldr;
+  StaticJsonDocument<128> sensorDoc;
+  sensorDoc["temperature"] = isnan(t) ? 0 : t;
+  sensorDoc["humidity"] = isnan(h) ? 0 : h;
+  sensorDoc["light"] = ldr;
 
-  char buffer[128];
-  serializeJson(doc, buffer);
-  client.publish("iot/sensor/data", buffer);
+  char sensorBuffer[128];
+  serializeJson(sensorDoc, sensorBuffer);
+  client.publish("iot/sensor/data", sensorBuffer);
   Serial.print("📤 Published sensor: ");
-  Serial.println(buffer);
+  Serial.println(sensorBuffer);
+  publishLedState();
+ 
 
   delay(2000);
 }

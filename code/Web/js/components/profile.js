@@ -7,6 +7,7 @@ class ProfileComponent {
             studentId: 'B22DCCN382',
             gitLink: 'https://github.com/Y0KUNA/IoT-BTL',
             reportLink: '',
+            postmanLink: 'https://tinyurl.com/k6a4b4yd',
             image: 'assets/images/image.png'
         };
     }
@@ -51,6 +52,13 @@ class ProfileComponent {
                     <span class="profile-label">Link git:</span>
                     <a href="${this.profileData.gitLink}" target="_blank" class="profile-value link">
                         ${this.profileData.gitLink}
+                    </a>
+                </div>
+
+                <div class="profile-row">
+                    <span class="profile-label">Link Postman:</span>
+                    <a href="${this.profileData.postmanLink}" target="_blank" class="profile-value link">
+                        ${this.profileData.postmanLink}
                     </a>
                 </div>
                 

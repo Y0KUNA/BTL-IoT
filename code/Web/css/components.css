@@ -629,12 +629,15 @@
 }
 
 .search-box {
-    width: 100%;
-    padding: 12px 16px;
-    border: 1px solid #D9DCDF;
+    flex: 1;
+    
+    padding: 8px 12px;
+    border: 1px solid #E9ECEF;
     border-radius: 4px;
+    font-family: inherit;
     font-size: 14px;
-    margin-bottom: 32px;
+    color: #212529;
+    background: #FFF;
 }
 
 .led-history-table {

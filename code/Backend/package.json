@@ -1,10 +1,11 @@
 {
+  "type": "module",
   "dependencies": {
     "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "mqtt": "^5.14.1",
-    "mssql": "^11.0.1",
-    "type": "module"
+    "mssql": "^11.0.1"
+    
   }
 }

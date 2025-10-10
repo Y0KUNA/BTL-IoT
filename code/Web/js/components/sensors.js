@@ -18,16 +18,15 @@ class SensorsComponent {
       const token = localStorage.getItem('token');
       const res = await fetch(
         `http://localhost:3000/api/sensors/history?sortField=${this.sortField}&order=${this.sortOrder}&searchField=${searchField}&searchQuery=${encodeURIComponent(searchQuery)}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`  // 👈 thêm token vào đây
-          }
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`  // 👈 thêm token vào đây
         }
-      );
+      });
       if (!res.ok) throw new Error("Không lấy được dữ liệu từ API");
       const data = await res.json();
-  
+
       this.historyData = data.map((item, index) => ({
         id: item.id || index + 1,
         temperature: item.temperature,
@@ -35,7 +34,7 @@ class SensorsComponent {
         light: item.light,
         timestamp: item.timestamp || new Date().toISOString(),
       }));
-  
+
       this.filteredData = [...this.historyData];
       this.render();
     } catch (err) {
@@ -59,45 +58,47 @@ class SensorsComponent {
 
   renderSearchBox() {
     return `
-      <div class="filter-section" style="
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 10px;
-      ">
-        <select id="sensor-search-field" style="
-            flex: 0 0 160px;
-            height: 36px;
-            padding: 0 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 14px;
-          ">
-          <option value="all" ${this.searchField === "all" ? "selected" : ""}>Tất cả</option>
-          <option value="id" ${this.searchField === "id" ? "selected" : ""}>ID</option>
-          <option value="temperature" ${this.searchField === "temperature" ? "selected" : ""}>Nhiệt độ</option>
-          <option value="humidity" ${this.searchField === "humidity" ? "selected" : ""}>Độ ẩm</option>
-          <option value="light" ${this.searchField === "light" ? "selected" : ""}>Ánh sáng</option>
-          <option value="timestamp" ${this.searchField === "timestamp" ? "selected" : ""}>Thời gian</option>
-        </select>
-  
-        <input 
-          type="text"
-          id="sensor-search"
-          placeholder="Nhập từ khóa tìm kiếm..."
-          value="${this.searchQuery}"
-          style="
-            flex: 1;
-            height: 36px;
-            padding: 0 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 14px;
-          "
-        >
-      </div>
-    `;
+    <div class="filter-section" style="
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    ">
+      <select id="sensor-search-field" style="
+          flex: 0 0 160px;
+          height: 36px;
+          padding: 0 8px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          font-size: 14px;
+        ">
+        <option value="all" ${this.searchField === "all" ? "selected" : ""}>Tất cả</option>
+        <option value="id" ${this.searchField === "id" ? "selected" : ""}>ID</option>
+        <option value="temperature" ${this.searchField === "temperature" ? "selected" : ""}>Nhiệt độ</option>
+        <option value="humidity" ${this.searchField === "humidity" ? "selected" : ""}>Độ ẩm</option>
+        <option value="light" ${this.searchField === "light" ? "selected" : ""}>Ánh sáng</option>
+        <option value="timestamp" ${this.searchField === "timestamp" ? "selected" : ""}>Thời gian</option>
+      </select>
+
+      <input 
+        type="text"
+        id="sensor-search"
+        placeholder="Nhập từ khóa tìm kiếm..."
+        value="${this.searchQuery}"
+        style="
+          flex: 1;
+          height: 36px;
+          padding: 0 10px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          box-sizing: border-box;
+          font-size: 14px;
+        "
+      >
+
+      <button id="sensor-search-btn" class="btn btn-primary">Tìm kiếm</button>
+    </div>
+  `;
   }
 
   renderDataTable() {
@@ -157,58 +158,77 @@ class SensorsComponent {
     return `
       <div class="pagination">
         <button class="btn btn-outline" ${this.currentPage === 1 ? "disabled" : ""} id="prev-page">Previous</button>
+        ${this.renderPageNumbers(totalPages)}
         <button class="btn btn-outline" ${this.currentPage === totalPages ? "disabled" : ""} id="next-page">Next</button>
         <div class="pagination-info">
           <span class="items-per-page">Items per page:</span>
           <select class="page-size-select" id="page-size">
             ${[5, 10, 20, 50]
-              .map(
-                (size) =>
-                  `<option value="${size}" ${
-                    this.itemsPerPage === size ? "selected" : ""
-                  }>${size}</option>`
-              )
-              .join("")}
+        .map(
+          (size) =>
+            `<option value="${size}" ${this.itemsPerPage === size ? "selected" : ""}>${size}</option>`
+        )
+        .join("")}
           </select>
         </div>
       </div>
     `;
   }
+      renderPageNumbers(totalPages) {
+    const pageNumbers = [];
+    const current = this.currentPage;
 
-  attachEventListeners() {
-    const searchInput = this.container.querySelector("#sensor-search");
-    const searchFieldSelect = this.container.querySelector("#sensor-search-field");
-
-    if (searchInput) {
-      searchInput.addEventListener("input", (e) => {
-        this.searchQuery = e.target.value;
-        this.applySearch();
-      });
-    }
-    if (searchFieldSelect) {
-      searchFieldSelect.addEventListener("change", (e) => {
-        this.searchField = e.target.value;
-        this.applySearch();
-      });
+    // Nếu tổng trang nhỏ hơn hoặc bằng 5 thì không cần dấu ...
+    if (totalPages <= 5) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(this.createPageButton(i, i === current));
+      }
+      return pageNumbers.join("");
     }
 
-    // sort header click
-    this.container.querySelectorAll("th.sortable").forEach((th) => {
-      th.addEventListener("click", () => {
-        const field = th.dataset.field;
-        if (this.sortField === field) {
-          // toggle order
-          this.sortOrder = this.sortOrder === "desc" ? "asc" : "desc";
-        } else {
-          this.sortField = field;
-          this.sortOrder = "desc";
-        }
-        this.fetchDataFromAPI(); // gọi API mới
-      });
-    });
+    // GẦN ĐẦU
+    if (current <= 4) {
+      for (let i = 1; i <= 4; i++) {
+        pageNumbers.push(this.createPageButton(i, i === current));
+      }
+      pageNumbers.push(`<span class="ellipsis">...</span>`);
+      pageNumbers.push(this.createPageButton(totalPages));
+    }
+    // GẦN CUỐI
+    else if (current >= totalPages - 3) {
+      pageNumbers.push(this.createPageButton(1));
+      pageNumbers.push(`<span class="ellipsis">...</span>`);
+      for (let i = totalPages - 3; i <= totalPages; i++) {
+        pageNumbers.push(this.createPageButton(i, i === current));
+      }
+    }
+    // Ở GIỮA
+    else {
+      pageNumbers.push(this.createPageButton(1));
+      pageNumbers.push(`<span class="ellipsis">...</span>`);
+      for (let i = current - 1; i <= current + 1; i++) {
+        pageNumbers.push(this.createPageButton(i, i === current));
+      }
+      pageNumbers.push(`<span class="ellipsis">...</span>`);
+      pageNumbers.push(this.createPageButton(totalPages));
+    }
 
-    this.attachPaginationEvents();
+    return pageNumbers.join("");
   }
+
+  createPageButton(pageNumber, isActive = false) {
+    return `
+      <button 
+        class="page-number ${isActive ? "active" : ""}" 
+        data-page="${pageNumber}"
+        style="
+          btn btn-outline
+        "
+      >${pageNumber}</button>
+    `;
+  }
+
+
 
   attachPaginationEvents() {
     const prevPage = this.container.querySelector("#prev-page");
@@ -230,6 +250,15 @@ class SensorsComponent {
           this.updateTable();
         }
       });
+    const pageButtons = this.container.querySelectorAll('.page-number');
+    pageButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const page = parseInt(e.target.getAttribute('data-page'));
+        this.currentPage = page;
+        this.render();
+      });
+    });
+
     if (pageSize)
       pageSize.addEventListener("change", (e) => {
         this.itemsPerPage = parseInt(e.target.value);
@@ -237,12 +266,53 @@ class SensorsComponent {
         this.updateTable();
       });
   }
+  attachEventListeners() {
+    const searchInput = this.container.querySelector("#sensor-search");
+    const searchFieldSelect = this.container.querySelector("#sensor-search-field");
+    const searchButton = this.container.querySelector("#sensor-search-btn");
+
+    // ❌ Bỏ auto-search khi nhập — chỉ lưu giá trị
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        this.searchQuery = e.target.value;
+      });
+    }
+
+    if (searchFieldSelect) {
+      searchFieldSelect.addEventListener("change", (e) => {
+        this.searchField = e.target.value;
+      });
+    }
+
+    // ✅ Thực hiện tìm kiếm khi click nút
+    if (searchButton) {
+      searchButton.addEventListener("click", () => {
+        this.applySearch();
+      });
+    }
+
+    // sort header click
+    this.container.querySelectorAll("th.sortable").forEach((th) => {
+      th.addEventListener("click", () => {
+        const field = th.dataset.field;
+        if (this.sortField === field) {
+          this.sortOrder = this.sortOrder === "desc" ? "asc" : "desc";
+        } else {
+          this.sortField = field;
+          this.sortOrder = "desc";
+        }
+        this.fetchDataFromAPI();
+      });
+    });
+
+    this.attachPaginationEvents();
+  }
+
+
 
   applySearch() {
     const query = this.searchQuery.trim();
     const field = this.searchField;
-  
-    // gọi lại API
     this.fetchDataFromAPI(field, query);
   }
 

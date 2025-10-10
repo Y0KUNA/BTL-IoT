@@ -1,18 +1,32 @@
 // backend.js
+// khởi chạy mosquitto:  mosquitto -v -c "C:\\Program Files\\mosquitto\\mosquitto.conf"
+
 import express from "express";
 import mqtt from "mqtt";
 import cors from "cors";
 import bodyParser from "body-parser";
 import sql from "mssql";
 import jwt from "jsonwebtoken";
+
 const app = express();
 app.use(express.json());
 app.use(cors());
 app.use(bodyParser.json());
+
+/**
+ * @apiDefine AuthHeader
+ * @apiHeader {String} Authorization Bearer token.
+ * @apiHeaderExample {json} Header-Example:
+ *     {
+ *       "Authorization": "Bearer your_token_here"
+ *     }
+ */
+
+// ✅ Middleware kiểm tra token
 const verifyToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  // Header có dạng: Bearer <token>
+  const authHeader = req.headers["authorization"]; // Header có dạng: Bearer <token>
   const token = authHeader && authHeader.split(" ")[1];
+
   if (!token) {
     return res.status(401).json({ error: "No token provided" });
   }
@@ -30,12 +44,12 @@ const verifyToken = (req, res, next) => {
 const dbConfig = {
   user: "sa",
   password: "12345678",
-  server: "DESKTOP-O8I245R\\HOTEL",
+  server: "DESKTOP-6A3BF1G",
   database: "iot_system",
   options: {
     encrypt: false,
-    trustServerCertificate: true,
-  },
+    trustServerCertificate: true
+  }
 };
 
 // ✅ Tạo pool kết nối
@@ -49,11 +63,11 @@ let pool;
   }
 })();
 
-// Kết nối MQTT Broker
+// ✅ Kết nối MQTT Broker
 const brokerUrl = "mqtt://localhost:1883";
 const client = mqtt.connect(brokerUrl, {
   username: "huy",
-  password: "123",
+  password: "123"
 });
 
 // Bộ nhớ tạm
@@ -61,14 +75,26 @@ let sensorData = {
   temperature: null,
   humidity: null,
   light: null,
-  lastUpdate: null,
+  lastUpdate: null
 };
 
 let ledState = {
   led1: "OFF",
   led2: "OFF",
-  led3: "OFF",
+  led3: "OFF"
 };
+
+let sensorDataTimeout = null;
+const SENSOR_TIMEOUT_MS = 6000; 
+
+function resetSensorData() {
+  sensorData.temperature = null;
+  sensorData.humidity = null;
+  sensorData.light = null;
+  sensorData.lastUpdate = null;
+  ledState
+  console.log("⚠️ ESP offline, reset sensor data");
+}
 
 client.on("connect", () => {
   console.log("✅ Kết nối MQTT Broker thành công!");
@@ -76,51 +102,44 @@ client.on("connect", () => {
   client.subscribe("iot/led/state");
 });
 
-// Nhận dữ liệu cảm biến từ ESP
+// 📥 Nhận dữ liệu từ ESP
 client.on("message", async (topic, message) => {
   if (topic === "iot/sensor/data") {
-    try {
-      const data = JSON.parse(message.toString());
-      sensorData.temperature = data.temperature;
-      sensorData.humidity = data.humidity;
-      sensorData.light = data.light;
-      sensorData.lastUpdate = new Date().toISOString();
+    const data = JSON.parse(message.toString());
+    sensorData.temperature = data.temperature;
+    sensorData.humidity = data.humidity;
+    sensorData.light = data.light;
+    sensorData.lastUpdate = new Date().toISOString();
+    console.log("📥 Dữ liệu nhận:", sensorData);
 
-      console.log("📥 Dữ liệu nhận:", sensorData);
-
-      // Lưu DB
-      if (pool?.connected) {
-        try {
-          await pool
-            .request()
-            .input("temperature", sql.Float, data.temperature)
-            .input("humidity", sql.Float, data.humidity)
-            .input("light", sql.Int, data.light)
-            .query(
-              `INSERT INTO sensor_data (temperature, humidity, light)
-               VALUES (@temperature, @humidity, @light)`
-            );
-          console.log("✅ Đã lưu dữ liệu cảm biến vào DB");
-        } catch (dbErr) {
-          console.error("❌ Lỗi khi insert sensor_data:", dbErr.message);
-        }
-      }
-    } catch (err) {
-      console.error("❌ Lỗi parse JSON:", err.message);
+    // Vẫn lưu DB nếu bạn muốn có lịch sử
+    if (pool?.connected) {
+      await pool
+        .request()
+        .input("temperature", sql.Float, data.temperature)
+        .input("humidity", sql.Float, data.humidity)
+        .input("light", sql.Int, data.light)
+        .query(`
+          INSERT INTO sensor_data (temperature, humidity, light)
+          VALUES (@temperature, @humidity, @light)
+        `);
     }
   }
-  // phản hồi trạng thái LED mới
+
+  // --- LED STATE ---
   if (topic === "iot/led/state") {
     try {
       const data = JSON.parse(message.toString());
+
       ledState = {
         led1: data.led1,
         led2: data.led2,
-        led3: data.led3,
+        led3: data.led3
       };
+
       console.log("📥 LED State từ ESP:", ledState);
 
-      // lưu DB log nguồn từ ESP
+      // Lưu log DB
       if (pool?.connected) {
         await pool
           .request()
@@ -128,50 +147,86 @@ client.on("message", async (topic, message) => {
           .input("led2", sql.Bit, data.led2 === "ON" ? 1 : 0)
           .input("led3", sql.Bit, data.led3 === "ON" ? 1 : 0)
           .input("source", sql.VarChar, "ESP")
-          .query(
-            `INSERT INTO device_log (led1, led2, led3, source)
-             VALUES (@led1, @led2, @led3, @source)`
-          );
+          .query(`
+            INSERT INTO device_log (led1, led2, led3, source)
+            VALUES (@led1, @led2, @led3, @source)
+          `);
       }
     } catch (err) {
       console.error("❌ Lỗi parse LED state:", err.message);
     }
   }
+
+  if (sensorDataTimeout) clearTimeout(sensorDataTimeout);
+  sensorDataTimeout = setTimeout(resetSensorData, SENSOR_TIMEOUT_MS);
 });
+
+/**
+ * @api {post} /api/login Login
+ * @apiName Login
+ * @apiGroup Auth
+ *
+ * @apiBody {String} username Username.
+ * @apiBody {String} password Password.
+ *
+ * @apiSuccess {String} token JWT token.
+ * @apiError 401 Invalid username or password.
+ */
+// 🔑 Đăng nhập
 app.post("/api/login", (req, res) => {
-  // Ở đây bạn có thể check user/pass từ DB. Demo mình hardcode.
   const { username, password } = req.body;
+
+  // Ở đây bạn có thể check user/pass từ DB. Demo hardcode:
   if (username === "admin" && password === "123456") {
-    // tạo token hết hạn sau 1h
     const token = jwt.sign({ username: "admin" }, "SECRET_KEY", {
-      expiresIn: "1h",
+      expiresIn: "1h"
     });
-    console.log("logged in! ", username);
+    console.log("✅ Logged in:", username);
     return res.json({ token });
   } else {
     return res.status(401).json({ error: "Sai username hoặc password" });
   }
 });
-// API - Lấy dữ liệu cảm biến mới nhất
-app.get("/api/sensors", verifyToken, async (req, res) => {
-  try {
-    if (pool?.connected) {
-      const result = await pool.request().query(`
-        SELECT TOP 1 * FROM sensor_data ORDER BY id DESC
-      `);
-      if (result.recordset.length > 0) {
-        return res.json(result.recordset[0]);
-      }
-    }
-    res.json(sensorData); // fallback
-  } catch (err) {
-    console.error("❌ Lỗi truy vấn sensor_data:", err.message);
-    res.status(500).json({ error: "DB query error" });
+
+/**
+ * @api {get} /api/sensors Get latest sensor data
+ * @apiName GetSensor
+ * @apiGroup Sensor
+ * @apiUse AuthHeader
+ *
+ * @apiSuccess {Number} temperature Temperature value.
+ * @apiSuccess {Number} humidity Humidity value.
+ * @apiSuccess {Number} light Light intensity.
+ * @apiSuccess {String} lastUpdate Last update timestamp.
+ */
+// 📡 API - Lấy dữ liệu cảm biến mới nhất (từ bộ nhớ tạm)
+app.get("/api/sensors", verifyToken, (req, res) => {
+  if (!sensorData.temperature && !sensorData.humidity && !sensorData.light) {
+    return res.status(404).json({ error: "No sensor data received yet" });
   }
+
+  res.json({
+    temperature: sensorData.temperature,
+    humidity: sensorData.humidity,
+    light: sensorData.light,
+    lastUpdate: sensorData.lastUpdate
+  });
 });
 
-// ✅ API - Lấy lịch sử dữ liệu cảm biến có sắp xếp
-// ✅ API - Lấy lịch sử dữ liệu cảm biến có sắp xếp & tìm kiếm
+/**
+ * @api {get} /api/sensors/history Get sensor history
+ * @apiName GetSensorHistory
+ * @apiGroup Sensor
+ * @apiUse AuthHeader
+ *
+ * @apiParam {String} [sortField] Sort field (id, temperature, humidity...).
+ * @apiParam {String} [order] asc|desc.
+ * @apiParam {String} [searchField] Field to search.
+ * @apiParam {String} [searchQuery] Search value.
+ *
+ * @apiSuccess {Object[]} recordset Array of sensor history data.
+ */
+// 📜 API - Lịch sử cảm biến (tìm kiếm + sắp xếp)
 app.get("/api/sensors/history", verifyToken, async (req, res) => {
   try {
     if (!pool?.connected) {
@@ -183,40 +238,40 @@ app.get("/api/sensors/history", verifyToken, async (req, res) => {
     let searchField = req.query.searchField || "all";
     let searchQuery = req.query.searchQuery || "";
 
-    // kiểm tra field hợp lệ
     const allowedFields = ["id", "temperature", "humidity", "light", "timestamp"];
     if (!allowedFields.includes(sortField)) sortField = "id";
     if (!["asc", "desc"].includes(order.toLowerCase())) order = "desc";
 
-    // cột timestamp
-    const column = sortField === "timestamp" ? "timestamp" : sortField;
-
-    // xây WHERE
     let where = "";
     if (searchQuery) {
-      const q = `%${searchQuery}%`;
       if (searchField !== "all" && allowedFields.includes(searchField)) {
         where = `WHERE CAST(${searchField} AS NVARCHAR) LIKE @q`;
       } else {
-        // tìm trong tất cả các cột
         where = `
           WHERE 
             CAST(id AS NVARCHAR) LIKE @q OR
             CAST(temperature AS NVARCHAR) LIKE @q OR
             CAST(humidity AS NVARCHAR) LIKE @q OR
             CAST(light AS NVARCHAR) LIKE @q OR
-            CAST(timestamp AS NVARCHAR) LIKE @q
+            CONVERT(VARCHAR(19), timestamp, 120) LIKE @q
         `;
       }
     }
 
     const sqlQuery = `
-      SELECT * FROM sensor_data 
+      SELECT 
+        id,
+        temperature,
+        humidity,
+        light,
+        FORMAT(timestamp, 'yyyy-MM-dd HH:mm:ss') AS timestamp
+      FROM sensor_data
       ${where}
-      ORDER BY ${column} ${order.toUpperCase()}
+      ORDER BY ${sortField} ${order.toUpperCase()}
     `;
 
-    const result = await pool.request()
+    const result = await pool
+      .request()
       .input("q", sql.NVarChar, `%${searchQuery}%`)
       .query(sqlQuery);
 
@@ -227,15 +282,37 @@ app.get("/api/sensors/history", verifyToken, async (req, res) => {
   }
 });
 
-
-// API - Lấy trạng thái LED hiện tại
+/**
+ * @api {get} /api/led Get LED state
+ * @apiName GetLED
+ * @apiGroup LED
+ * @apiUse AuthHeader
+ *
+ * @apiSuccess {String} led1 State ON|OFF.
+ * @apiSuccess {String} led2 State ON|OFF.
+ * @apiSuccess {String} led3 State ON|OFF.
+ */
+// 💡 API - Trạng thái LED hiện tại
 app.get("/api/led", verifyToken, (req, res) => {
   res.json(ledState);
 });
 
-// API - Điều khiển LED
+/**
+ * @api {post} /api/led Control LED
+ * @apiName ControlLED
+ * @apiGroup LED
+ * @apiUse AuthHeader
+ *
+ * @apiBody {String="ON","OFF"} led1 LED1 state.
+ * @apiBody {String="ON","OFF"} led2 LED2 state.
+ * @apiBody {String="ON","OFF"} led3 LED3 state.
+ *
+ * @apiSuccess {String} message Response message.
+ */
+// 💡 API - Điều khiển LED
 app.post("/api/led", verifyToken, async (req, res) => {
   const { led1, led2, led3 } = req.body;
+
   if (
     !["ON", "OFF"].includes(led1) ||
     !["ON", "OFF"].includes(led2) ||
@@ -244,44 +321,43 @@ app.post("/api/led", verifyToken, async (req, res) => {
     return res.status(400).json({ error: "Sai tham số! Chỉ dùng ON hoặc OFF." });
   }
 
-  // gửi lệnh điều khiển xuống ESP
+  // Gửi lệnh điều khiển xuống ESP
   client.publish(
     "iot/led/control",
     JSON.stringify({ led1, led2, led3 })
   );
 
-  // không tự cập nhật ledState nữa, chờ ESP phản hồi qua topic iot/led/state
   res.json({
-    message: "Đã gửi lệnh điều khiển LED, chờ ESP phản hồi",
+    message: "Đã gửi lệnh điều khiển LED, chờ ESP phản hồi"
   });
 });
 
-
-
-// API - Lịch sử LED
-// API - Lịch sử thay đổi LED
+/**
+ * @api {get} /api/led/history Get LED change history
+ * @apiName GetLEDHistory
+ * @apiGroup LED
+ * @apiUse AuthHeader
+ *
+ * @apiParam {String} [search] Search keyword.
+ * @apiParam {String} [sortField] Sort field (id, timestamp, source).
+ * @apiParam {String} [order] asc|desc.
+ *
+ * @apiSuccess {Object[]} recordset Array of LED history data.
+ */
+// 📜 API - Lịch sử thay đổi LED
 app.get("/api/led/history", verifyToken, async (req, res) => {
   try {
     if (!pool?.connected) {
       return res.status(500).json({ error: "DB not connected" });
     }
 
-    let search = req.query.search || "";
+    let search = (req.query.search || "").toLowerCase().trim();
     let sortField = req.query.sortField || "id";
     let order = req.query.order || "desc";
 
-    // danh sách cột cho phép
     const allowedFields = ["id", "timestamp", "source"];
     if (!allowedFields.includes(sortField)) sortField = "id";
     if (!["asc", "desc"].includes(order.toLowerCase())) order = "desc";
-
-    let where = "";
-    if (search) {
-      where = `WHERE 
-        CAST(id AS NVARCHAR) LIKE @q OR
-        CAST(source AS NVARCHAR) LIKE @q OR
-        FORMAT(timestamp,'yyyy-MM-dd HH:mm:ss') LIKE @q`;
-    }
 
     const sqlQuery = `
       SELECT
@@ -292,62 +368,71 @@ app.get("/api/led/history", verifyToken, async (req, res) => {
         source,
         FORMAT(timestamp, 'yyyy-MM-dd HH:mm:ss') AS timestamp
       FROM device_log
-      ${where}
       ORDER BY ${sortField} ${order.toUpperCase()}
     `;
-
-    const result = await pool.request()
-      .input("q", sql.NVarChar, `%${search}%`)
-      .query(sqlQuery);
-
+    const result = await pool.request().query(sqlQuery);
     const rows = result.recordset;
 
-    // lọc chỉ LED thay đổi
     const changes = [];
     let prev = null;
 
     for (const row of rows) {
       if (!prev) {
-        // lần đầu tiên: push nguyên trạng thái
         prev = row;
-      } else {
-        // so sánh từng led
-        if (row.led1 !== prev.led1) {
-          changes.push({
-            id: row.id,
-            timestamp: row.timestamp,
-            source: row.source,
-            led1: row.led1
-          });
-        } else if (row.led2 !== prev.led2) {
-          changes.push({
-            id: row.id,
-            timestamp: row.timestamp,
-            source: row.source,
-            led2: row.led2
-          });
-        } else if (row.led3 !== prev.led3) {
-          changes.push({
-            id: row.id,
-            timestamp: row.timestamp,
-            source: row.source,
-            led3: row.led3
-          });
-        }
+        continue;
       }
+
+      if (row.led1 !== prev.led1) {
+        changes.push({
+          id: row.id,
+          timestamp: row.timestamp,
+          source: row.source,
+          led: "led1",
+          state: row.led1 ? "ON" : "OFF",
+        });
+      }
+      if (row.led2 !== prev.led2) {
+        changes.push({
+          id: row.id,
+          timestamp: row.timestamp,
+          source: row.source,
+          led: "led2",
+          state: row.led2 ? "ON" : "OFF",
+        });
+      }
+      if (row.led3 !== prev.led3) {
+        changes.push({
+          id: row.id,
+          timestamp: row.timestamp,
+          source: row.source,
+          led: "led3",
+          state: row.led3 ? "ON" : "OFF",
+        });
+      }
+
       prev = row;
     }
 
-    res.json(changes);
+    let filteredChanges = changes;
+    if (search) {
+      filteredChanges = changes.filter(item => {
+        const matchId = item.id.toString().includes(search);
+        const matchTimestamp = item.timestamp.toLowerCase().includes(search);
+        const matchSource = item.source.toLowerCase().includes(search);
+        const matchLed = item.led.toLowerCase().includes(search);
+        const matchState = item.state.toLowerCase().includes(search);
+        return matchId || matchTimestamp || matchSource || matchLed || matchState;
+      });
+    }
+
+    res.json(filteredChanges);
   } catch (err) {
     console.error("❌ Lỗi lấy device_log:", err.message);
     res.status(500).json({ error: "DB query error" });
   }
 });
 
-
-
-
+// 🚀 Khởi chạy server
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Backend chạy tại http://localhost:${PORT}`);

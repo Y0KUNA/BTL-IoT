@@ -3,7 +3,6 @@ class HistoryComponent {
     constructor() {
         this.container = document.getElementById('history-component');
         this.ledHistory = [];
-        this.filteredHistory = [];
         this.currentPage = 1;
         this.itemsPerPage = 5;
         this.searchQuery = '';
@@ -19,6 +18,7 @@ class HistoryComponent {
                 sortField: "id",
                 order: "desc"
             });
+
             const response = await fetch(`http://localhost:3000/api/led/history?${params}`, {
                 method: 'GET',
                 headers: {
@@ -26,37 +26,35 @@ class HistoryComponent {
                     'Authorization': `Bearer ${token}`
                 }
             });
+
             if (!response.ok) throw new Error('Failed to fetch history');
-    
+
             const data = await response.json();
+            console.log("📦 API Data:", data);
+
+            // Reset old data only after successful fetch
             this.ledHistory = [];
-    
+
             data.forEach(row => {
-                // Tìm ra key LED nào tồn tại trong row
-                const ledKey = ["led1","led2","led3"].find(k => k in row && row[k] !== undefined);
-                if (!ledKey) return; // không có đèn nào => bỏ qua
-    
-                const state = row[ledKey] === true || row[ledKey] === 1 ? "OFF" : "ON";
-    
+                if (!row || !row.led || !row.state) return;
+
                 this.ledHistory.push({
-                    id: row.id, // có thể giữ nguyên id của row luôn
-                    device: ledKey.toUpperCase(),
-                    status: `Turned ${state}`,
+                    id: row.id,
+                    device: row.led.toUpperCase(),
+                    status: `Turned ${row.state}`,
                     timestamp: row.timestamp || "N/A",
                 });
             });
-    
+
+            // Sort by ID descending
             this.ledHistory.sort((a, b) => b.id - a.id);
-            this.filteredHistory = [...this.ledHistory];
+
             this.render();
         } catch (error) {
-            console.error('Error loading LED history:', error);
-            this.showMessage('Không thể tải dữ liệu từ API!', 'error');
+            console.error('❌ Failed to load LED history:', error);
+            this.showMessage('Failed to load data from API!', 'error');
         }
     }
-    
-
-
 
     render() {
         if (!this.container) return;
@@ -76,28 +74,35 @@ class HistoryComponent {
         return `
             <div class="led-history-header">
                 <h1 class="card-title">LED Control History</h1>
-                <button id="refresh-history" class="refresh-btn">🔄 Refresh</button>
             </div>
         `;
     }
 
     renderSearchBox() {
         return `
-            <input 
-                type="text" 
-                class="search-box" 
-                placeholder="Search by timestamp (e.g., 2025-09-18, 14:30)..."
-                value="${this.searchQuery}"
-                id="history-search"
-            >
+            <div class="filter-section" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <input 
+                    type="text"
+                    id="history-search"
+                    placeholder="Search..."
+                    value="${this.searchQuery}"
+                    style="flex:1;height:36px;padding:0 10px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-size:14px;"
+                >
+                <button id="search-btn" class="btn btn-primary" style="height:36px;">Search</button>
+                <button id="refresh-history" class="btn btn-secondary" style="height:36px;">Refresh</button>
+            </div>
         `;
     }
 
     renderHistoryTable() {
+        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+        const endIndex = startIndex + this.itemsPerPage;
+        const pageData = this.ledHistory.slice(startIndex, endIndex);
+
         return `
             <div class="led-history-table">
                 ${this.renderTableHeader()}
-                ${this.renderTableBody()}
+                ${this.renderTableBody(pageData, startIndex)}
                 ${this.renderTableFooter()}
             </div>
         `;
@@ -105,8 +110,8 @@ class HistoryComponent {
 
     renderTableHeader() {
         return `
-            <div class="led-table-header">
-                <div class="led-header-cell">#</div>
+            <div class="led-table-header" style="display:grid;grid-template-columns:80px 1fr 1fr 200px;">
+                <div class="led-header-cell">ID</div>
                 <div class="led-header-cell">DEVICE</div>
                 <div class="led-header-cell">STATUS</div>
                 <div class="led-header-cell right">TIMESTAMP</div>
@@ -114,20 +119,20 @@ class HistoryComponent {
         `;
     }
 
-    renderTableBody() {
-        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-        const endIndex = startIndex + this.itemsPerPage;
-        const pageData = this.filteredHistory.slice(startIndex, endIndex);
-
-        return pageData.map((item, index) => this.renderTableRow(item, startIndex + index + 1)).join('');
+    renderTableBody(pageData, startIndex) {
+        if (pageData.length === 0) {
+            return `<div class="no-data-row">No data available</div>`;
+        }
+        return pageData
+            .map((item, index) => this.renderTableRow(item, startIndex + index + 1))
+            .join('');
     }
 
-    renderTableRow(item, displayIndex) {
+    renderTableRow(item) {
         const statusClass = item.status.includes('ON') ? 'on' : 'off';
-
         return `
-            <div class="led-table-row">
-                <div class="led-table-cell id">${displayIndex}</div>
+            <div class="led-table-row" style="display:grid;grid-template-columns:80px 1fr 1fr 200px;">
+                <div class="led-table-cell id">${item.id}</div>
                 <div class="led-table-cell device">${item.device}</div>
                 <div class="led-table-cell status ${statusClass}">${item.status}</div>
                 <div class="led-table-cell timestamp">${item.timestamp}</div>
@@ -136,7 +141,7 @@ class HistoryComponent {
     }
 
     renderTableFooter() {
-        const totalEntries = this.filteredHistory.length;
+        const totalEntries = this.ledHistory.length;
         const startIndex = (this.currentPage - 1) * this.itemsPerPage;
         const endIndex = Math.min(startIndex + this.itemsPerPage, totalEntries);
         const totalPages = Math.ceil(totalEntries / this.itemsPerPage);
@@ -146,7 +151,6 @@ class HistoryComponent {
                 <div class="led-pagination-info">
                     <span>Showing ${totalEntries > 0 ? startIndex + 1 : 0} to ${endIndex} of ${totalEntries} results</span>
                 </div>
-                
                 <div class="led-pagination-controls">
                     <button class="pagination-btn" id="prev-btn" ${this.currentPage === 1 ? 'disabled' : ''}>Previous</button>
                     ${this.renderPageNumbers(totalPages)}
@@ -163,44 +167,87 @@ class HistoryComponent {
     }
 
     renderPageNumbers(totalPages) {
-        const pageNumbers = [];
-        const maxVisiblePages = 3;
-        let startPage = Math.max(1, this.currentPage - Math.floor(maxVisiblePages / 2));
-        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    const pageNumbers = [];
+    const current = this.currentPage;
 
-        if (endPage - startPage + 1 < maxVisiblePages) {
-            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    if (totalPages <= 5) {
+        for (let i = 1; i <= totalPages; i++) {
+            pageNumbers.push(this.createPageButton(i, i === current));
         }
-
-        for (let i = startPage; i <= endPage; i++) {
-            pageNumbers.push(`
-                <button class="page-number ${i === this.currentPage ? 'active' : ''}" data-page="${i}">
-                    ${i}
-                </button>
-            `);
-        }
-
-        return pageNumbers.join('');
+        return pageNumbers.join("");
     }
+
+    // Gần đầu
+    if (current <= 4) {
+        for (let i = 1; i <= 4; i++) {
+            pageNumbers.push(this.createPageButton(i, i === current));
+        }
+        pageNumbers.push(`<span class="ellipsis">...</span>`);
+        pageNumbers.push(this.createPageButton(totalPages));
+    }
+    // Gần cuối
+    else if (current >= totalPages - 3) {
+        pageNumbers.push(this.createPageButton(1));
+        pageNumbers.push(`<span class="ellipsis">...</span>`);
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+            pageNumbers.push(this.createPageButton(i, i === current));
+        }
+    }
+    // Ở giữa
+    else {
+        pageNumbers.push(this.createPageButton(1));
+        pageNumbers.push(`<span class="ellipsis">...</span>`);
+        for (let i = current - 1; i <= current + 1; i++) {
+            pageNumbers.push(this.createPageButton(i, i === current));
+        }
+        pageNumbers.push(`<span class="ellipsis">...</span>`);
+        pageNumbers.push(this.createPageButton(totalPages));
+    }
+
+    return pageNumbers.join("");
+}
+
+createPageButton(pageNumber, isActive = false) {
+    return `
+        <button 
+            class="page-number ${isActive ? "active" : ""}" 
+            data-page="${pageNumber}"
+            style="
+                btn btn-outline
+            "
+        >${pageNumber}</button>
+    `;
+}
+
 
     attachEventListeners() {
         const searchInput = this.container.querySelector('#history-search');
+        const searchBtn = this.container.querySelector('#search-btn');
+        const refreshBtn = this.container.querySelector('#refresh-history');
+
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
                 this.searchQuery = e.target.value;
-                // gọi API mới
+            });
+        }
+
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => {
+                this.currentPage = 1;
                 this.fetchHistoryFromAPI(this.searchQuery);
             });
         }
 
-        const refreshBtn = this.container.querySelector('#refresh-history');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => this.fetchHistoryFromAPI(this.searchQuery));
+            refreshBtn.addEventListener('click', () => {
+                this.searchQuery = '';
+                this.currentPage = 1;
+                this.fetchHistoryFromAPI('');
+            });
         }
 
         this.attachPaginationEvents();
     }
-
 
     attachPaginationEvents() {
         const prevBtn = this.container.querySelector('#prev-btn');
@@ -210,65 +257,37 @@ class HistoryComponent {
             prevBtn.addEventListener('click', () => {
                 if (this.currentPage > 1) {
                     this.currentPage--;
-                    this.updateTable();
+                    this.render();
                 }
             });
         }
 
         if (nextBtn) {
             nextBtn.addEventListener('click', () => {
-                const totalPages = Math.ceil(this.filteredHistory.length / this.itemsPerPage);
+                const totalPages = Math.ceil(this.ledHistory.length / this.itemsPerPage);
                 if (this.currentPage < totalPages) {
                     this.currentPage++;
-                    this.updateTable();
+                    this.render();
                 }
             });
         }
 
-        // ⬇️ Lấy tất cả nút số trang
         const pageButtons = this.container.querySelectorAll('.page-number');
         pageButtons.forEach(button => {
             button.addEventListener('click', (e) => {
                 const page = parseInt(e.target.getAttribute('data-page'));
                 this.currentPage = page;
-                this.updateTable();
+                this.render();
             });
         });
-
 
         const pageSizeSelect = this.container.querySelector('#page-size');
         if (pageSizeSelect) {
             pageSizeSelect.addEventListener('change', (e) => {
-                this.itemsPerPage = parseInt(e.target.value, 10); // đổi số item/page
-                this.currentPage = 1; // về trang đầu
-                this.updateTable(); // render lại bảng
+                this.itemsPerPage = parseInt(e.target.value, 10);
+                this.currentPage = 1;
+                this.render();
             });
-        }
-    }
-
-
-    applySearch() {
-        if (!this.searchQuery.trim()) {
-            this.filteredHistory = [...this.ledHistory];
-        } else {
-            const query = this.searchQuery.toLowerCase();
-            this.filteredHistory = this.ledHistory.filter(item => {
-                return (
-                    item.device.toLowerCase().includes(query) ||
-                    item.status.toLowerCase().includes(query) ||
-                    item.timestamp.toLowerCase().includes(query)
-                );
-            });
-        }
-        this.currentPage = 1;
-        this.updateTable();
-    }
-
-    updateTable() {
-        const tableContainer = this.container.querySelector('.led-history-table');
-        if (tableContainer) {
-            tableContainer.innerHTML = this.renderTableHeader() + this.renderTableBody() + this.renderTableFooter();
-            this.attachPaginationEvents();
         }
     }
 
@@ -289,13 +308,10 @@ class HistoryComponent {
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         `;
         document.body.appendChild(messageEl);
-        setTimeout(() => {
-            messageEl.remove();
-        }, 3000);
+        setTimeout(() => messageEl.remove(), 3000);
     }
 }
 
-// Export for use in other modules
 if (typeof window !== 'undefined') {
     window.HistoryComponent = HistoryComponent;
 }

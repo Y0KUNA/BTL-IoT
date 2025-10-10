@@ -125,7 +125,7 @@ class HomeComponent {
             throw new Error(errData.error || 'Gửi LED state thất bại');
           }
       
-          // Server trả về trạng thái LED thực tế (backend bạn sửa trả {ledState})
+          // Server trả về trạng thái LED thực tế 
           const data = await res.json();
           // cập nhật theo trạng thái thực tế trả về
           this.ledStates = {
@@ -429,7 +429,7 @@ class HomeComponent {
                   label: 'Humidity (%)',
                   data: this.chartData.map(d => d.humidity),
                   backgroundColor: 'blue',
-                  yAxisID: 'y'
+                  yAxisID: 'y2'
                 }
               ]
             },
@@ -443,15 +443,22 @@ class HomeComponent {
                   position: 'left',
                   min: 0,
                   max: 50,
-                  title: { display: true, text: 'Temperature (°C) & Humidity (%)' }
+                  title: { display: true, text: 'Temperature (°C)' }
                 },
                 y1: {
                   type: 'linear',
                   position: 'right',
                   min: 0,
-                  max: 1000,
+                  max: 1500,
                   title: { display: true, text: 'Light (lux)' },
                   grid: { drawOnChartArea: false }
+                },
+                y2: {
+                  type: 'linear',
+                  position: 'up',
+                  min: 0,
+                  max: 100,
+                  title: { display: true, text: 'Humidity (%)' }
                 },
                 x: {
                   title: { display: true, text: 'Time' }
