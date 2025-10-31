@@ -129,16 +129,24 @@ class HistoryComponent {
     }
 
     renderTableRow(item) {
-        const statusClass = item.status.includes('ON') ? 'on' : 'off';
-        return `
-            <div class="led-table-row" style="display:grid;grid-template-columns:80px 1fr 1fr 200px;">
-                <div class="led-table-cell id">${item.id}</div>
-                <div class="led-table-cell device">${item.device}</div>
-                <div class="led-table-cell status ${statusClass}">${item.status}</div>
-                <div class="led-table-cell timestamp">${item.timestamp}</div>
+    const statusClass = item.status.includes('ON') ? 'on' : 'off';
+    return `
+        <div class="led-table-row" style="display:grid;grid-template-columns:80px 1fr 1fr 200px;">
+            <div class="led-table-cell id">${item.id}</div>
+            <div class="led-table-cell device">${item.device}</div>
+            <div class="led-table-cell status ${statusClass}">${item.status}</div>
+            <div 
+                class="led-table-cell timestamp copyable" 
+                data-timestamp="${item.timestamp}"
+                style="cursor:pointer; user-select:none;"
+                title="Click to copy timestamp"
+            >
+                ${item.timestamp}
             </div>
-        `;
-    }
+        </div>
+    `;
+}
+
 
     renderTableFooter() {
         const totalEntries = this.ledHistory.length;
@@ -247,7 +255,23 @@ createPageButton(pageNumber, isActive = false) {
         }
 
         this.attachPaginationEvents();
+        this.attachCopyTimestampEvents(); 
     }
+    attachCopyTimestampEvents() {
+    const timestampCells = this.container.querySelectorAll('.timestamp.copyable');
+    timestampCells.forEach(cell => {
+        cell.addEventListener('click', async () => {
+            const text = cell.getAttribute('data-timestamp');
+            try {
+                await navigator.clipboard.writeText(text);
+                this.showMessage(`Copied: ${text}`, 'success');
+            } catch (err) {
+                console.error('❌ Copy failed', err);
+                this.showMessage('Failed to copy!', 'error');
+            }
+        });
+    });
+}
 
     attachPaginationEvents() {
         const prevBtn = this.container.querySelector('#prev-btn');

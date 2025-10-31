@@ -21,7 +21,7 @@ class SensorsComponent {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`  // 👈 thêm token vào đây
+          'Authorization': `Bearer ${token}`
         }
       });
       if (!res.ok) throw new Error("Không lấy được dữ liệu từ API");
@@ -141,6 +141,7 @@ class SensorsComponent {
     return `<th class="sortable" data-field="${field}" style="cursor:pointer;">${label} ${arrow}</th>`;
   }
 
+  // 🟡 Thêm thuộc tính copyable cho timestamp
   renderTableRow(item) {
     return `
       <tr>
@@ -148,7 +149,14 @@ class SensorsComponent {
         <td>${item.temperature ?? "-"}</td>
         <td>${item.humidity ?? "-"}</td>
         <td>${item.light ?? "-"}</td>
-        <td>${item.timestamp}</td>
+        <td 
+          class="timestamp-cell copyable" 
+          data-timestamp="${item.timestamp}" 
+          style="cursor:pointer; user-select:none;"
+          title="Click để copy timestamp"
+        >
+          ${item.timestamp}
+        </td>
       </tr>
     `;
   }
@@ -174,11 +182,11 @@ class SensorsComponent {
       </div>
     `;
   }
-      renderPageNumbers(totalPages) {
+
+  renderPageNumbers(totalPages) {
     const pageNumbers = [];
     const current = this.currentPage;
 
-    // Nếu tổng trang nhỏ hơn hoặc bằng 5 thì không cần dấu ...
     if (totalPages <= 5) {
       for (let i = 1; i <= totalPages; i++) {
         pageNumbers.push(this.createPageButton(i, i === current));
@@ -186,24 +194,19 @@ class SensorsComponent {
       return pageNumbers.join("");
     }
 
-    // GẦN ĐẦU
     if (current <= 4) {
       for (let i = 1; i <= 4; i++) {
         pageNumbers.push(this.createPageButton(i, i === current));
       }
       pageNumbers.push(`<span class="ellipsis">...</span>`);
       pageNumbers.push(this.createPageButton(totalPages));
-    }
-    // GẦN CUỐI
-    else if (current >= totalPages - 3) {
+    } else if (current >= totalPages - 3) {
       pageNumbers.push(this.createPageButton(1));
       pageNumbers.push(`<span class="ellipsis">...</span>`);
       for (let i = totalPages - 3; i <= totalPages; i++) {
         pageNumbers.push(this.createPageButton(i, i === current));
       }
-    }
-    // Ở GIỮA
-    else {
+    } else {
       pageNumbers.push(this.createPageButton(1));
       pageNumbers.push(`<span class="ellipsis">...</span>`);
       for (let i = current - 1; i <= current + 1; i++) {
@@ -221,14 +224,10 @@ class SensorsComponent {
       <button 
         class="page-number ${isActive ? "active" : ""}" 
         data-page="${pageNumber}"
-        style="
-          btn btn-outline
-        "
+        style="btn btn-outline"
       >${pageNumber}</button>
     `;
   }
-
-
 
   attachPaginationEvents() {
     const prevPage = this.container.querySelector("#prev-page");
@@ -266,12 +265,51 @@ class SensorsComponent {
         this.updateTable();
       });
   }
+
+  // 🟢 Hàm copy timestamp
+  attachCopyTimestampEvents() {
+    const cells = this.container.querySelectorAll('.timestamp-cell.copyable');
+    cells.forEach(cell => {
+      cell.addEventListener('click', async () => {
+        const text = cell.getAttribute('data-timestamp');
+        try {
+          await navigator.clipboard.writeText(text);
+          this.showMessage(`✅ Copied: ${text}`, 'success');
+        } catch (err) {
+          console.error('❌ Copy failed', err);
+          this.showMessage('❌ Copy thất bại', 'error');
+        }
+      });
+    });
+  }
+
+  // 🟡 Thêm thông báo nhỏ
+  showMessage(text, type = 'success') {
+    const msg = document.createElement('div');
+    msg.textContent = text;
+    msg.style.position = 'fixed';
+    msg.style.top = '20px';
+    msg.style.right = '20px';
+    msg.style.padding = '8px 12px';
+    msg.style.borderRadius = '6px';
+    msg.style.color = '#fff';
+    msg.style.fontSize = '14px';
+    msg.style.zIndex = '9999';
+    msg.style.background = type === 'success' ? '#4CAF50' : '#f44336';
+    document.body.appendChild(msg);
+
+    setTimeout(() => {
+      msg.style.opacity = '0';
+      msg.style.transition = 'opacity 0.5s';
+      setTimeout(() => msg.remove(), 500);
+    }, 1500);
+  }
+
   attachEventListeners() {
     const searchInput = this.container.querySelector("#sensor-search");
     const searchFieldSelect = this.container.querySelector("#sensor-search-field");
     const searchButton = this.container.querySelector("#sensor-search-btn");
 
-    // ❌ Bỏ auto-search khi nhập — chỉ lưu giá trị
     if (searchInput) {
       searchInput.addEventListener("input", (e) => {
         this.searchQuery = e.target.value;
@@ -284,14 +322,12 @@ class SensorsComponent {
       });
     }
 
-    // ✅ Thực hiện tìm kiếm khi click nút
     if (searchButton) {
       searchButton.addEventListener("click", () => {
         this.applySearch();
       });
     }
 
-    // sort header click
     this.container.querySelectorAll("th.sortable").forEach((th) => {
       th.addEventListener("click", () => {
         const field = th.dataset.field;
@@ -306,9 +342,8 @@ class SensorsComponent {
     });
 
     this.attachPaginationEvents();
+    this.attachCopyTimestampEvents(); // 👈 Gọi hàm copy timestamp
   }
-
-
 
   applySearch() {
     const query = this.searchQuery.trim();

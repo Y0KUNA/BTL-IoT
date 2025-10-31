@@ -85,7 +85,7 @@ let ledState = {
 };
 
 let sensorDataTimeout = null;
-const SENSOR_TIMEOUT_MS = 6000; 
+const SENSOR_TIMEOUT_MS = 6000;
 
 function resetSensorData() {
   sensorData.temperature = null;
@@ -106,13 +106,17 @@ client.on("connect", () => {
 client.on("message", async (topic, message) => {
   if (topic === "iot/sensor/data") {
     const data = JSON.parse(message.toString());
+
+    // ✅ Chuyển đổi ánh sáng ADC → lux (chuẩn hóa đơn giản)
+   
+
     sensorData.temperature = data.temperature;
     sensorData.humidity = data.humidity;
     sensorData.light = data.light;
     sensorData.lastUpdate = new Date().toISOString();
-    console.log("📥 Dữ liệu nhận:", sensorData);
 
-    // Vẫn lưu DB nếu bạn muốn có lịch sử
+    console.log("📥 Sensor Data (converted):", sensorData);
+
     if (pool?.connected) {
       await pool
         .request()
@@ -120,45 +124,35 @@ client.on("message", async (topic, message) => {
         .input("humidity", sql.Float, data.humidity)
         .input("light", sql.Int, data.light)
         .query(`
-          INSERT INTO sensor_data (temperature, humidity, light)
-          VALUES (@temperature, @humidity, @light)
-        `);
+        INSERT INTO sensor_data (temperature, humidity, light)
+        VALUES (@temperature, @humidity, @light)
+      `);
     }
   }
+
+
 
   // --- LED STATE ---
   if (topic === "iot/led/state") {
-    try {
-      const data = JSON.parse(message.toString());
+  try {
+    const data = JSON.parse(message.toString());
 
-      ledState = {
-        led1: data.led1,
-        led2: data.led2,
-        led3: data.led3
-      };
+    ledState = {
+      led1: data.led1,
+      led2: data.led2,
+      led3: data.led3
+    };
 
-      console.log("📥 LED State từ ESP:", ledState);
+    console.log("📥 LED State từ ESP:", ledState);
 
-      // Lưu log DB
-      if (pool?.connected) {
-        await pool
-          .request()
-          .input("led1", sql.Bit, data.led1 === "ON" ? 1 : 0)
-          .input("led2", sql.Bit, data.led2 === "ON" ? 1 : 0)
-          .input("led3", sql.Bit, data.led3 === "ON" ? 1 : 0)
-          .input("source", sql.VarChar, "ESP")
-          .query(`
-            INSERT INTO device_log (led1, led2, led3, source)
-            VALUES (@led1, @led2, @led3, @source)
-          `);
-      }
-    } catch (err) {
-      console.error("❌ Lỗi parse LED state:", err.message);
-    }
+
+  } catch (err) {
+    console.error("❌ Lỗi parse LED state:", err.message);
   }
+}
 
-  if (sensorDataTimeout) clearTimeout(sensorDataTimeout);
-  sensorDataTimeout = setTimeout(resetSensorData, SENSOR_TIMEOUT_MS);
+if (sensorDataTimeout) clearTimeout(sensorDataTimeout);
+sensorDataTimeout = setTimeout(resetSensorData, SENSOR_TIMEOUT_MS);
 });
 
 /**
@@ -326,7 +320,19 @@ app.post("/api/led", verifyToken, async (req, res) => {
     "iot/led/control",
     JSON.stringify({ led1, led2, led3 })
   );
-
+  if (pool?.connected) {
+    await pool
+      .request()
+      .input("led1", sql.Bit, led1 === "ON" ? 1 : 0)
+      .input("led2", sql.Bit, led2 === "ON" ? 1 : 0)
+      .input("led3", sql.Bit, led3 === "ON" ? 1 : 0)
+      .input("source", sql.VarChar, "USER")
+      .query(`
+          INSERT INTO device_log (led1, led2, led3, source)
+          VALUES (@led1, @led2, @led3, @source)
+        `);
+    console.log("📝 Đã lưu device_log từ USER");
+  }
   res.json({
     message: "Đã gửi lệnh điều khiển LED, chờ ESP phản hồi"
   });
@@ -376,19 +382,20 @@ app.get("/api/led/history", verifyToken, async (req, res) => {
     const changes = [];
     let prev = null;
 
-    for (const row of rows) {
+    for (let i = 0; i < rows.length; i++) {
+      let row = rows[i];
       if (!prev) {
         prev = row;
         continue;
       }
-
+      console.log("So sánh:", row, prev);
       if (row.led1 !== prev.led1) {
         changes.push({
           id: row.id,
           timestamp: row.timestamp,
           source: row.source,
           led: "led1",
-          state: row.led1 ? "ON" : "OFF",
+          state: row.led1 ? "OFF" : "ON",
         });
       }
       if (row.led2 !== prev.led2) {
@@ -397,7 +404,7 @@ app.get("/api/led/history", verifyToken, async (req, res) => {
           timestamp: row.timestamp,
           source: row.source,
           led: "led2",
-          state: row.led2 ? "ON" : "OFF",
+          state: row.led2 ? "OFF" : "ON",
         });
       }
       if (row.led3 !== prev.led3) {
@@ -406,13 +413,13 @@ app.get("/api/led/history", verifyToken, async (req, res) => {
           timestamp: row.timestamp,
           source: row.source,
           led: "led3",
-          state: row.led3 ? "ON" : "OFF",
+          state: row.led3 ? "OFF" : "ON",
         });
       }
 
       prev = row;
     }
-
+    console.log("Tổng thay đổi LED:", changes);
     let filteredChanges = changes;
     if (search) {
       filteredChanges = changes.filter(item => {

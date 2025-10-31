@@ -81,12 +81,41 @@ class IoTDashboard {
         }, 1000);
     }
 
-    updateLiveIndicator() {
-        const liveDot = document.querySelector('.live-dot');
-        if (liveDot) {
-            liveDot.style.animation = 'pulse 2s infinite';
-        }
+    updateLiveIndicator(lastUpdateIso) {
+  const indicator = document.getElementById("liveIndicator");
+  const lastUpdateEl = document.getElementById("lastUpdate");
+
+  // If no timestamp -> offline
+  if (!lastUpdateIso) {
+    if (indicator) {
+      indicator.classList.remove("online");
+      indicator.classList.add("offline");
+      indicator.textContent = "ESP8266: Offline";
     }
+    if (lastUpdateEl) lastUpdateEl.textContent = "—";
+    return;
+  }
+
+  const last = new Date(lastUpdateIso);
+  const ageMs = Date.now() - last.getTime();
+  const SENSOR_TIMEOUT_MS = 6000; // keep in sync with backend
+
+  if (ageMs <= SENSOR_TIMEOUT_MS) {
+    if (indicator) {
+      indicator.classList.remove("offline");
+      indicator.classList.add("online");
+      indicator.textContent = "ESP8266: Online";
+    }
+  } else {
+    if (indicator) {
+      indicator.classList.remove("online");
+      indicator.classList.add("offline");
+      indicator.textContent = "ESP8266: Offline";
+    }
+  }
+
+  if (lastUpdateEl) lastUpdateEl.textContent = last.toLocaleString();
+}
 
     handleLoginSuccess() {
         // Được gọi khi LoginComponent login thành công

@@ -6,7 +6,7 @@
 // ====== WiFi & MQTT ======
 const char* ssid = "realme Q3s";
 const char* password = "10580103";
-const char* mqtt_server = "192.168.108.201";
+const char* mqtt_server = "192.168.245.201";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -145,11 +145,11 @@ void loop() {
   float h = dht.readHumidity();
   float t = dht.readTemperature();
   int ldr = analogRead(LDR_PIN);
-
+ 
   StaticJsonDocument<128> sensorDoc;
   sensorDoc["temperature"] = isnan(t) ? 0 : t;
   sensorDoc["humidity"] = isnan(h) ? 0 : h;
-  sensorDoc["light"] = ldr;
+  sensorDoc["light"] = 1023-ldr;
 
   char sensorBuffer[128];
   serializeJson(sensorDoc, sensorBuffer);

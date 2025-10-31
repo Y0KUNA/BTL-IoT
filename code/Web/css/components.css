@@ -147,14 +147,20 @@
     gap: 8px;
 }
 
-.connected-dot {
+.connected-dot.connected {
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: #28A745;
     opacity: 0.8;
 }
-
+.connected-dot.disconnected {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff2323;
+    opacity: 0.8;
+}
 .connected-text {
     font-size: 12px;
     color: #6C757D;
